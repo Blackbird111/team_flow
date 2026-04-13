@@ -1,0 +1,4 @@
+-- AlterTable
+ALTER TABLE "User" ADD COLUMN "marketingOptOut" BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE "User" ADD COLUMN "onboardingEmailStep" INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE "User" ADD COLUMN "lastActiveAt" TIMESTAMP(3);

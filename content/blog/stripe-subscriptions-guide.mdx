@@ -1,0 +1,67 @@
+---
+title: "Stripe Subscriptions: What Every SaaS Developer Needs to Know"
+description: "The tricky parts of Stripe subscriptions — webhooks, trial periods, cancellations, and failed payments — explained clearly."
+date: "2024-02-03"
+author: "Your Name"
+tags: ["Stripe", "Payments", "SaaS"]
+---
+
+Stripe is the gold standard for SaaS payments. But there's a lot of surface area, and getting it wrong means either losing money or breaking your app. Here's what actually matters.
+
+## Webhooks Are Not Optional
+
+Many developers add Stripe and assume the checkout session is enough. It's not.
+
+When a user pays, subscribes, or cancels, Stripe sends webhook events to your server. If you don't handle them, your database gets out of sync:
+
+- User cancels → your DB still shows them as active
+- Payment fails → user loses access without notice
+- Trial ends → nothing happens
+
+The critical events to handle:
+
+```ts
+switch (event.type) {
+  case "checkout.session.completed":
+    // Create subscription in DB
+    break;
+  case "invoice.payment_failed":
+    // Mark subscription as past_due
+    break;
+  case "customer.subscription.deleted":
+    // Downgrade user to free plan
+    break;
+}
+```
+
+SaaSKit handles all of these in `src/app/api/stripe/webhook/route.ts`.
+
+## Always Store the Customer ID
+
+When a user first pays, Stripe creates a Customer object with an ID like `cus_xxx`. Store this ID against the user in your database.
+
+Why? Because everything in Stripe is tied to the customer — subscriptions, payment methods, invoices. You'll need it to open the billing portal, refund payments, and query history.
+
+## The Billing Portal Saves You Support Tickets
+
+Instead of building your own subscription management UI, use Stripe's hosted billing portal. Users can update payment methods, download invoices, and cancel — all without you writing a line of UI code.
+
+```ts
+const session = await stripe.billingPortal.sessions.create({
+  customer: customerId,
+  return_url: `${process.env.NEXT_PUBLIC_APP_URL}/settings`,
+});
+redirect(session.url);
+```
+
+That's the entire implementation.
+
+## Test in Test Mode First
+
+Use Stripe's test card `4242 4242 4242 4242` with any future expiry and any CVC. Stripe CLI lets you forward webhook events to your local server:
+
+```bash
+stripe listen --forward-to localhost:3000/api/stripe/webhook
+```
+
+Never test payments with real cards in development.

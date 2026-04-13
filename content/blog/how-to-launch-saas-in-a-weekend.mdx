@@ -1,0 +1,70 @@
+---
+title: "How to Launch Your SaaS in a Weekend"
+description: "A step-by-step guide to going from idea to live product using modern tools and SaaSKit."
+date: "2024-01-15"
+author: "Your Name"
+tags: ["SaaS", "Next.js", "Tutorial"]
+---
+
+Building a SaaS doesn't have to take months. With the right foundation, you can go from idea to live product in a single weekend. Here's how.
+
+## The Stack That Saves You Time
+
+Before writing a single line of business logic, you need to choose a stack that handles the boring parts for you:
+
+- **Authentication** — login, register, password reset, OAuth
+- **Payments** — Stripe subscriptions, webhooks, billing portal
+- **Database** — schema, migrations, type-safe queries
+- **Email** — transactional emails that don't end up in spam
+
+SaaSKit handles all of this out of the box.
+
+## Step 1: Clone and Configure
+
+```bash
+git clone https://github.com/you/saaskit my-saas
+cd my-saas
+cp .env.example .env.local
+npm install
+```
+
+Fill in your environment variables — Stripe keys, database URL, NextAuth secret, OpenAI key — and you're ready to run.
+
+## Step 2: Customize Your Branding
+
+Update `src/lib/seo.ts` with your product name and URL. Change the color scheme in `tailwind.config.ts`. That's it — the entire template uses CSS variables, so one change propagates everywhere.
+
+## Step 3: Define Your Pricing
+
+Edit `src/lib/stripe.ts` to set your plan names, prices, and limits:
+
+```ts
+export const PLANS = {
+  STARTER: {
+    name: "Starter",
+    price: 9,
+    limits: { messagesPerMonth: 100 },
+  },
+  PRO: {
+    name: "Pro",
+    price: 29,
+    limits: { messagesPerMonth: 1000 },
+  },
+};
+```
+
+Create the corresponding products in your Stripe dashboard, then paste the price IDs into your `.env.local`.
+
+## Step 4: Ship
+
+```bash
+git push
+```
+
+Vercel auto-deploys on every push. Add your custom domain, and you're live.
+
+---
+
+The hardest part of launching a SaaS isn't the code — it's finding customers. Once your infrastructure is handled, you can focus entirely on that.
+
+> The best time to launch was yesterday. The second best time is today.

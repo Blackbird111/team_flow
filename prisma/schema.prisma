@@ -1,0 +1,363 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── AUTH (не трогаем) ────────────────────────────────────────
+
+model User {
+  id                      String    @id @default(cuid())
+  name                    String?
+  email                   String    @unique
+  emailVerified           DateTime?
+  image                   String?
+  password                String?
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+  verificationToken       String?   @unique
+  verificationTokenExpiry DateTime?
+  marketingOptOut         Boolean   @default(false)
+  onboardingEmailStep     Int       @default(0)
+  lastActiveAt            DateTime?
+
+  accounts             Account[]
+  sessions             Session[]
+  ownedWorkspaces      Workspace[]
+  workspaceMemberships WorkspaceMember[]
+  sentInvites          WorkspaceInvite[]
+  personalTodos        PersonalTodo[]
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ─── INVITES ─────────────────────────────────────────────────
+
+model WorkspaceInvite {
+  id          String   @id @default(cuid())
+  workspaceId String
+  email       String
+  token       String   @unique @default(cuid())
+  role        WorkspaceRole @default(MEMBER)
+  invitedById String
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  createdAt   DateTime @default(now())
+
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  invitedBy   User      @relation(fields: [invitedById], references: [id])
+
+  @@unique([workspaceId, email])
+}
+
+// ─── BILLING ─────────────────────────────────────────────────
+
+enum WorkspacePlan {
+  FREE
+  PRO
+  AGENCY
+}
+
+enum SubStatus {
+  ACTIVE
+  INACTIVE
+  CANCELED
+  PAST_DUE
+}
+
+model Subscription {
+  id                     String        @id @default(cuid())
+  workspaceId            String        @unique
+  plan                   WorkspacePlan @default(FREE)
+  status                 SubStatus     @default(ACTIVE)
+  stripeCustomerId       String?
+  stripeSubscriptionId   String?
+  stripeCurrentPeriodEnd DateTime?
+  aiCreditsBalance       Float         @default(0)
+  createdAt              DateTime      @default(now())
+  updatedAt              DateTime      @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+}
+
+// ─── WORKSPACE ────────────────────────────────────────────────
+
+model Workspace {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  ownerId   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  owner           User              @relation(fields: [ownerId], references: [id])
+  members         WorkspaceMember[]
+  projects        Project[]
+  subscription    Subscription?
+  invites         WorkspaceInvite[]
+  directMessages  DirectMessage[]
+}
+
+enum WorkspaceRole {
+  ADMIN
+  MEMBER
+}
+
+model WorkspaceMember {
+  id              String        @id @default(cuid())
+  workspaceId     String
+  userId          String?
+  name            String
+  note            String?
+  email           String
+  role            WorkspaceRole @default(MEMBER)
+  avatarUrl       String?
+  telegramChatId  String?
+  hourlyRate      Float?
+  createdAt       DateTime      @default(now())
+
+  workspace        Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user             User?            @relation(fields: [userId], references: [id])
+  projectMembers   ProjectMember[]
+  todoAssignees    TodoAssignee[]
+  comments         Comment[]
+  timeLogs         TimeLog[]
+  sentMessages     DirectMessage[]  @relation("SentMessages")
+  receivedMessages DirectMessage[]  @relation("ReceivedMessages")
+
+  @@unique([workspaceId, email])
+}
+
+// ─── PROJECTS ─────────────────────────────────────────────────
+
+enum ProjectStatus {
+  ACTIVE
+  COMPLETED
+  ARCHIVED
+}
+
+model Project {
+  id                  String        @id @default(cuid())
+  workspaceId         String
+  name                String
+  description         String?
+  status              ProjectStatus @default(ACTIVE)
+  clientName          String?
+  clientEmail         String?
+  clientPortalEnabled Boolean       @default(false)
+  clientPortalSlug    String?       @unique
+  deadline            DateTime?
+  budgetUsd           Float?
+  color               String        @default("blue")
+  isTemplate          Boolean       @default(false)
+  templateName        String?
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+  archivedAt          DateTime?
+
+  workspace      Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  members        ProjectMember[]
+  todoSections   TodoSection[]
+  todoItems      TodoItem[]
+  timeLogs       TimeLog[]
+  clientRequests ClientRequest[]
+}
+
+enum ProjectRole {
+  MANAGER
+  CONTRIBUTOR
+  CLIENT
+}
+
+model ProjectMember {
+  id                String      @id @default(cuid())
+  projectId         String
+  workspaceMemberId String
+  role              ProjectRole @default(CONTRIBUTOR)
+  hourlyRate        Float?
+  addedAt           DateTime    @default(now())
+
+  project         Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  workspaceMember WorkspaceMember @relation(fields: [workspaceMemberId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, workspaceMemberId])
+}
+
+// ─── TODO ─────────────────────────────────────────────────────
+
+model TodoSection {
+  id        String   @id @default(cuid())
+  projectId String
+  title     String
+  position  Int
+  createdAt DateTime @default(now())
+
+  project   Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  todoItems TodoItem[]
+}
+
+enum TodoStatus {
+  OPEN
+  IN_PROGRESS
+  COMPLETED
+}
+
+model TodoItem {
+  id          String     @id @default(cuid())
+  projectId   String
+  sectionId   String?
+  text        String
+  description String?
+  position    Int
+  status      TodoStatus @default(OPEN)
+  completedAt DateTime?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  project   Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  section   TodoSection?   @relation(fields: [sectionId], references: [id])
+  assignees TodoAssignee[]
+  comments  Comment[]
+  timeLogs  TimeLog[]
+  clientRequests ClientRequest[]
+}
+
+model TodoAssignee {
+  id                String   @id @default(cuid())
+  todoItemId        String
+  workspaceMemberId String
+  completed         Boolean  @default(false)
+  completedAt       DateTime?
+
+  todoItem        TodoItem        @relation(fields: [todoItemId], references: [id], onDelete: Cascade)
+  workspaceMember WorkspaceMember @relation(fields: [workspaceMemberId], references: [id], onDelete: Cascade)
+
+  @@unique([todoItemId, workspaceMemberId])
+}
+
+// ─── COMMENTS ─────────────────────────────────────────────────
+
+model Comment {
+  id                String   @id @default(cuid())
+  todoItemId        String
+  authorId          String
+  text              String
+  createdAt         DateTime @default(now())
+
+  todoItem        TodoItem        @relation(fields: [todoItemId], references: [id], onDelete: Cascade)
+  author          WorkspaceMember @relation(fields: [authorId], references: [id])
+}
+
+// ─── TIME TRACKING ────────────────────────────────────────────
+
+model TimeLog {
+  id                String   @id @default(cuid())
+  projectId         String
+  todoItemId        String?
+  workspaceMemberId String
+  minutes           Int
+  costUsd           Float?
+  description       String?
+  loggedAt          DateTime @default(now())
+  createdAt         DateTime @default(now())
+
+  project         Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  todoItem        TodoItem?       @relation(fields: [todoItemId], references: [id])
+  workspaceMember WorkspaceMember @relation(fields: [workspaceMemberId], references: [id])
+}
+
+// ─── CLIENT REQUESTS ──────────────────────────────────────────
+
+enum ClientRequestStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  CLARIFICATION
+}
+
+model ClientRequest {
+  id              String              @id @default(cuid())
+  projectId       String
+  clientName      String
+  clientEmail     String?
+  title           String
+  description     String?
+  status          ClientRequestStatus @default(PENDING)
+  pmNote          String?
+  convertedToTodoId String?
+  createdAt       DateTime            @default(now())
+  resolvedAt      DateTime?
+
+  project         Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  convertedToTodo TodoItem? @relation(fields: [convertedToTodoId], references: [id])
+}
+
+// ─── PERSONAL TODOS ───────────────────────────────────────────
+
+model PersonalTodo {
+  id          String    @id @default(cuid())
+  userId      String
+  text        String
+  description String?
+  completed   Boolean   @default(false)
+  completedAt DateTime?
+  position    Int       @default(0)
+  createdAt   DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, completed])
+}
+
+// ─── DIRECT MESSAGES ──────────────────────────────────────────
+
+model DirectMessage {
+  id          String   @id @default(cuid())
+  workspaceId String
+  senderId    String
+  receiverId  String
+  text        String
+  readAt      DateTime?
+  createdAt   DateTime @default(now())
+
+  workspace Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  sender    WorkspaceMember @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver  WorkspaceMember @relation("ReceivedMessages", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, senderId, receiverId])
+  @@index([receiverId, readAt])
+}
