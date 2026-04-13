@@ -6,6 +6,8 @@ import Link from "next/link";
 import { CheckCircle2, XCircle, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
+export const dynamic = 'force-dynamic';
+
 export default function UnsubscribePage() {
   const params = useSearchParams();
   const token = params.get("token");
